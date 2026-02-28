@@ -16,7 +16,7 @@ GESTURES = [
 ]
 
 class GestureEngine:
-    def __init__(self, model_path=".\\task_files\\gesture_recognizer.task"):
+    def __init__(self, model_path="src\\task_files\\gesture_recognizer.task"):
         base = python.BaseOptions(model_asset_path=model_path)
         options = vision.GestureRecognizerOptions(
             base_options=base,
@@ -97,9 +97,14 @@ class GestureEngine:
         ri = GESTURES.index(right)
 
         return li * 7 + ri  # 0–48
+    
+    def rulset_code(self, g):
+        left, right, literal = g["left"], g["right"], g["dist"]
+
+        if left is n
 
     def ruleset_confirm(self, g):
-        left, right = g["left"], g["right"]
+        left, right = g["left"], g["right"],
         
         print("DEBUG Confirm ruleset:", left, right)
 
@@ -123,6 +128,9 @@ class GestureEngine:
             case "confirm":
                 print("Two thumbs UP to CONFIRM")
                 print("Two thumbs DOWN to CANCEL")
+            case "code":
+                print("Welcome to Hand++")
+
 
         while True:
             ret, frame = self.cap.read()
@@ -141,6 +149,8 @@ class GestureEngine:
                 raw = self.ruleset_tweet_select(gestures)
             elif mode == "confirm":
                 raw = self.ruleset_confirm(gestures)
+            elif mode == "code":
+                raw = self.ruleset_code(gestures)
             else:
                 raise ValueError(f"Unknown mode: {mode}")
             

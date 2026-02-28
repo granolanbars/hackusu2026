@@ -2,7 +2,7 @@ import cv2
 import time
 from detection import *
 from tweet import send_tweet
-from coding import coding_interpreter
+from coding import coding_interpreter, welcome_message
 
 
 
@@ -16,9 +16,9 @@ def main():
     while True:
 
         print("What would you like to do today?")
-        print("1. Send a tweet: (Point upwards)") # find a hand signal
-        print("2. Write some Code: (Fist)") # find a hand signal
-        print("3. Go to sleep: (ILY)") # find a hand signal
+        print("1. Send a tweet: (Point upwards)") 
+        print("2. Write some Code: (Fist)") 
+        print("3. Go to sleep: (ILY)") 
 
         nav = engine.detect("navigation")
 
@@ -34,7 +34,8 @@ def main():
                     continue
             case "CODE":
                 #run coding function
-                coding_interpreter()
+                print(welcome_message)
+                code = engine.detect("code")
             
             case "SLEEP":
                 print("Going to Sleep, Goodbye!")
@@ -42,12 +43,6 @@ def main():
                     print(f'Going to sleep in {3-i}')
                     time.sleep(1)
                 break
-
-
-
-
-
-        
 
 
 
