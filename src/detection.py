@@ -1,4 +1,5 @@
 import time
+import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -15,15 +16,22 @@ GESTURES = [
 ]
 
 class GestureEngine:
-    def __init__(self, model_path="src/gesture_recognizer.task"):
+    def __init__(self, model_path=".\\task_files\\gesture_recognizer.task"):
         base = python.BaseOptions(model_asset_path=model_path)
         options = vision.GestureRecognizerOptions(
             base_options=base,
             running_mode=vision.RunningMode.IMAGE,
-            min_hand_detection_confidence=0.6,
-            min_hand_presence_confidence=0.6,
-            min_hand_tracking_confidence=0.6,
+            num_hands=2,
         )
+
+        
+        self.cap = cv2.VideoCapture(0)
+
+        self.debouncers = {
+    "navigation": GestureDebouncer(hold_ms=750, none_reset_ms=250),
+    "tweet_select": GestureDebouncer(hold_ms=750, none_reset_ms=250),
+    "confirm": GestureDebouncer(hold_ms=750, none_reset_ms=250)
+        }
         self.detector = vision.GestureRecognizer.create_from_options(options)
 
     # ---------------------------------------------------------
@@ -66,6 +74,9 @@ class GestureEngine:
     def ruleset_navigation(self, g):
         left, right = g["left"], g["right"]
 
+        ###DEBUG###
+        #print("DEBUG nav ruleset:", left, right)
+
         if left == "Pointing_Up" or right == "Pointing_Up":
             return "TWEET"
         if left == "Closed_Fist" or right == "Closed_Fist":
@@ -77,17 +88,20 @@ class GestureEngine:
 
     def ruleset_tweet_select(self, g):
         left, right = g["left"], g["right"]
+        #print("DEBUG nav ruleset:", left, right)
 
         if left == "None" or right == "None":
             return None
 
-        li = GESTURES.index(left) - 1
-        ri = GESTURES.index(right) - 1
+        li = GESTURES.index(left)
+        ri = GESTURES.index(right)
 
         return li * 7 + ri  # 0–48
 
     def ruleset_confirm(self, g):
         left, right = g["left"], g["right"]
+        
+        print("DEBUG Confirm ruleset:", left, right)
 
         if left == "Thumb_Down" and right == "Thumb_Down":
             return False
@@ -99,19 +113,44 @@ class GestureEngine:
 
 
     #called by main
-    def detect(self, frame, mode):
-        gestures = self.detect_gestures(frame)
+    def detect(self, mode):
+        debouncer = self.debouncers[mode]
 
-        if mode == "navigation":
-            return self.ruleset_navigation(gestures)
+        match mode:
+            case "tweet_select":
+                print("Hold up any combination of two signs" \
+                "\nto choose a new tweet")
+            case "confirm":
+                print("Two thumbs UP to CONFIRM")
+                print("Two thumbs DOWN to CANCEL")
 
-        if mode == "tweet_select":
-            return self.ruleset_tweet_select(gestures)
+        while True:
+            ret, frame = self.cap.read()
 
-        if mode == "confirm":
-            return self.ruleset_confirm(gestures)
+            cv2.imshow("Camera", frame)
+            cv2.waitKey(1)
 
-        raise ValueError(f"Unknown mode: {mode}")
+            if not ret:
+                continue
+
+            gestures = self.detect_gestures(frame)
+
+            if mode == "navigation":
+                raw = self.ruleset_navigation(gestures)
+            elif mode == "tweet_select":
+                raw = self.ruleset_tweet_select(gestures)
+            elif mode == "confirm":
+                raw = self.ruleset_confirm(gestures)
+            else:
+                raise ValueError(f"Unknown mode: {mode}")
+            
+            #debug
+            #print("Raw:", raw)
+
+            stable = debouncer.update(raw, gestures["left"], gestures["right"])
+
+            if stable is not None:
+                return stable
     
 
 
