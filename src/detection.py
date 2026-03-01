@@ -1,3 +1,7 @@
+import os
+os.environ["GLOG_minloglevel"] = "2"   # hide INFO and WARNING logs
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["MEDIAPIPE_DISABLE_GPU"] = "1"
 import time
 import cv2
 import mediapipe as mp
@@ -23,21 +27,39 @@ class GestureEngine:
             running_mode=vision.RunningMode.IMAGE,
             num_hands=2,
         )
-
+        self.timestamp = 0
+    
+        self.cap = cv2.VideoCapture(1)
+    
         
-        self.cap = cv2.VideoCapture(0)
+        self.smoothed_dist = 0.0
+        self.alpha = 0.25
+
+        hold_ms = 400
+        none_reset_ms = 200
 
         self.debouncers = {
-    "navigation": GestureDebouncer(hold_ms=750, none_reset_ms=250),
-    "tweet_select": GestureDebouncer(hold_ms=750, none_reset_ms=250),
-    "confirm": GestureDebouncer(hold_ms=750, none_reset_ms=250)
+    "navigation": GestureDebouncer(hold_ms, none_reset_ms),
+    "tweet_select": GestureDebouncer(hold_ms, none_reset_ms),
+    "confirm": GestureDebouncer(hold_ms, none_reset_ms),
+    "code": GestureDebouncer(hold_ms, none_reset_ms)
         }
         self.detector = vision.GestureRecognizer.create_from_options(options)
+
+    def process_distance(self, raw_dist, frame_height):
+        if raw_dist is None:
+            return None
+        normalized = raw_dist / frame_height
+        scaled = normalized * 200
+        self.smoothed_dist = self.alpha * scaled + (1 - self.alpha) * self.smoothed_dist
+        literal = round(self.smoothed_dist / 10) * 10
+        return int(literal)
 
     # ---------------------------------------------------------
     # Raw detection (runs MediaPipe once per frame)
     # ---------------------------------------------------------
     def detect_gestures(self, frame):
+        h, w, dunce = frame.shape
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
         result = self.detector.recognize(mp_image)
 
@@ -45,12 +67,31 @@ class GestureEngine:
         right = "None"
         left_lm = None
         right_lm = None
+        right_dist = None
+        #flipping hands to make easier readability
+        
+
 
         if result.gestures:
             for i, gesture_list in enumerate(result.gestures):
                 gesture = gesture_list[0].category_name
                 hand_label = result.handedness[i][0].category_name
                 landmarks = result.hand_landmarks[i]
+
+                # Compute bounding box
+                xs = [lm.x * w for lm in landmarks]
+                ys = [lm.y * h for lm in landmarks]
+
+                x_min, x_max = int(min(xs)), int(max(xs))
+                y_min, y_max = int(min(ys)), int(max(ys))
+
+                # Draw rectangle
+                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+
+                # Label the box with gesture + handedness
+                label = f"{hand_label}: {gesture}"
+                cv2.putText(frame, label, (x_min, y_min - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
                 if hand_label == "Left":
                     left = gesture
@@ -59,11 +100,30 @@ class GestureEngine:
                     right = gesture
                     right_lm = landmarks
 
+                    thumb = landmarks[4]
+                    pinky = landmarks[8]
+
+                    x1, y1 = thumb.x * w, thumb.y * h
+                    x2, y2 = pinky.x * w, pinky.y * h
+                    raw_dist = ((x2 - x1)**2 + (y2 - y1)**2) ** 0.5
+
+                    right_dist = self.process_distance(raw_dist, h)
+                    # Draw line between thumb and pinky
+                    cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+
+                    # Display the distance (raw or smoothed)
+                    cv2.putText(frame,
+                            f"dist: {int(raw_dist)} px  lit: {right_dist}",
+                            (int(x1), int(y1) - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 
+                            0.6,(255, 0, 0),2)
+
         return {
             "left": left,
             "right": right,
             "left_landmarks": left_lm,
             "right_landmarks": right_lm,
+            "dist": right_dist,
             "raw": result
         }
 
@@ -98,15 +158,27 @@ class GestureEngine:
 
         return li * 7 + ri  # 0–48
     
-    def rulset_code(self, g):
+    def ruleset_code(self, g):
         left, right, literal = g["left"], g["right"], g["dist"]
 
-        if left is n
+        if left == "None" or right == "None":
+            #print("None")
+            return None
+        elif left == "Thumb_Down" and right == "Thumb_Down":
+            #print("CANCEL")
+            return ("CANCEL", left, right, None)
+        elif left == "Thumb_Up" and right == "Thumb_Up":
+            #print("RUN")
+            return ("RUN", left, right, None)
+        else:
+            #print("LINE READ")
+            return ("LINE", left, right, literal)
+
 
     def ruleset_confirm(self, g):
         left, right = g["left"], g["right"],
         
-        print("DEBUG Confirm ruleset:", left, right)
+        #print("DEBUG Confirm ruleset:", left, right)
 
         if left == "Thumb_Down" and right == "Thumb_Down":
             return False
@@ -129,19 +201,22 @@ class GestureEngine:
                 print("Two thumbs UP to CONFIRM")
                 print("Two thumbs DOWN to CANCEL")
             case "code":
-                print("Welcome to Hand++")
+                print(">>>",end="")
 
 
         while True:
             ret, frame = self.cap.read()
-
-            cv2.imshow("Camera", frame)
+            gestures = self.detect_gestures(frame)   # detect + draw on THIS frame
+            cv2.imshow("Camera", frame)       # show AFTER drawing
             cv2.waitKey(1)
+
+           
+
+            
 
             if not ret:
                 continue
 
-            gestures = self.detect_gestures(frame)
 
             if mode == "navigation":
                 raw = self.ruleset_navigation(gestures)
@@ -151,13 +226,17 @@ class GestureEngine:
                 raw = self.ruleset_confirm(gestures)
             elif mode == "code":
                 raw = self.ruleset_code(gestures)
+                stable = debouncer.update(raw, gestures["left"], gestures["right"], gestures["dist"])
+                if stable is not None:
+                    return stable
+                continue
             else:
                 raise ValueError(f"Unknown mode: {mode}")
             
             #debug
             #print("Raw:", raw)
 
-            stable = debouncer.update(raw, gestures["left"], gestures["right"])
+            stable = debouncer.update(raw, gestures["left"], gestures["right"], None)
 
             if stable is not None:
                 return stable
@@ -175,13 +254,13 @@ class GestureDebouncer:
         self.start_time = None
         self.last_value = None
 
-    def update(self, value, left, right):
+    def update(self, value, left, right, literal=None):
         now = time.time()
 
         # -----------------------------------------------------
         # 1. None-reset logic (must hold None for 250 ms)
         # -----------------------------------------------------
-        if left == "None" and right == "None":
+        if value is None:
             if self.none_start is None:
                 self.none_start = now
             elif now - self.none_start >= self.none_reset_ms:

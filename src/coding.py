@@ -1,112 +1,82 @@
-welcome_message = "Welcome to Hand++!"  
+# from detection import GestureEngine
+# from interpreter import transpile, coding_interpreter
 
+# def code_edit(engine_a):
+#     program = []
+#     confirmed = False
+#     print("Welcome to Hand++")
+#     while not confirmed:
+#         line = engine_a.detect("code")
+#         match line[0]:
+#             case "CANCEL":
+#                 print("Are you sure you want to Cancel?")
+#                 confirmed = engine_a.detect("confirm")
+#                 if confirmed:
+#                     print("returning to main menu")
+#                 else:
+#                     print("Continue Programming")
+#             case "RUN":
+#                 print("Are you Sure you want to run your program?")
+#                 confirmed = engine_a.detect("confirm")
+#                 if confirmed:
+#                     print("Running your program...")
+#                     print("\n\n\n")
+#                     print(coding_interpreter(transpile(program)))
+#                     print("\n\n\n")
+#                     break
+#                 else:
+#                     continue
+#             case "LINE":
+#                 values = line[1:4]
+#                 for value in values:
+#                     print(value, end = " ")
+#                 print()
+#                 program.append((line[1:4]))
+#             case _:
+#                 continue
 
+from detection import GestureEngine
+from interpreter import transpile, coding_interpreter
+from colors import c, RED, GREEN, YELLOW, CYAN, MAGENTA
 
+def code_edit(engine_a):
+    program = []
+    confirmed = False
 
-def bf_set_literal(n: int) -> str:
-    return "[-]" + ("+" * n)
+    print(c("Welcome to Hand++", CYAN))
 
+    while not confirmed:
+        line = engine_a.detect("code")
 
-def transpile(instructions):
-    """
-    instructions: list of (left, right, literal)
-    literal is ignored except in Victory mode
-    """
-    bf = []
+        match line[0]:
 
-    for left, right, literal in instructions:
+            case "CANCEL":
+                print(c("Are you sure you want to Cancel?", YELLOW))
+                confirmed = engine_a.detect("confirm")
 
-        # -------------------------
-        # LITERAL MODE (Victory)
-        # -------------------------
-        if left == "Victory":
-            if literal is None:
-                raise ValueError("Literal mode requires a measured value")
-            bf.append(bf_set_literal(literal))
-            continue
+                if confirmed:
+                    print(c("Returning to main menu", RED))
+                else:
+                    print(c("Continue Programming", CYAN))
 
-        # -------------------------
-        # BANK A — Open_Palm
-        # -------------------------
-        if left == "Open_Palm":
+            case "RUN":
+                print(c("Are you sure you want to run your program?", YELLOW))
+                confirmed = engine_a.detect("confirm")
 
-            if right == "Closed_Fist":
-                bf.append("+")
-            elif right == "Open_Palm":
-                bf.append("-")
-            elif right == "Pointing_Up":
-                bf.append(">")
-            elif right == "Thumb_Down":
-                bf.append("<")
-            elif right == "Victory":
-                bf.append(".")
-            elif right == "ILoveYou":
-                bf.append(",")
-            # None or anything else = NOP
-            continue
+                if confirmed:
+                    print(c("Running your program...", GREEN))
+                    print("\n\n")
+                    output = coding_interpreter(transpile(program))
+                    print(c(output, GREEN))
+                    print("\n\n")
+                    break
+                else:
+                    continue
 
-        # -------------------------
-        # BANK B — Open_Fist
-        # -------------------------
-        if left == "Open_Fist":
+            case "LINE":
+                values = line[1:4]
+                print(c(" ".join(str(v) for v in values), MAGENTA))
+                program.append((line[1:4]))
 
-            if right == "Open_Fist":
-                bf.append("[")
-            elif right == "Close_Fist":
-                bf.append("]")
-            # everything else = NOP
-            continue
-
-        # Unknown left-hand gesture
-        raise ValueError(f"Unknown left-hand gesture: {left}")
-
-    return "".join(bf)
-
-def coding_interpreter(code, input_data=""):
-
-    tape = [0] * 30000
-    ptr = 0
-    ip = 0  # instruction pointer
-    input_ptr = 0
-    output = []
-
-    # Precompute matching brackets for fast jumping
-    stack = []
-    brackets = {}
-    for i, c in enumerate(code):
-        if c == "[":
-            stack.append(i)
-        elif c == "]":
-            start = stack.pop()
-            brackets[start] = i
-            brackets[i] = start
-
-    while ip < len(code):
-        cmd = code[ip]
-
-        if cmd == ">":
-            ptr += 1
-        elif cmd == "<":
-            ptr -= 1
-        elif cmd == "+":
-            tape[ptr] = (tape[ptr] + 1) % 256
-        elif cmd == "-":
-            tape[ptr] = (tape[ptr] - 1) % 256
-        elif cmd == ".":
-            output.append(chr(tape[ptr]))
-        elif cmd == ",":
-            if input_ptr < len(input_data):
-                tape[ptr] = ord(input_data[input_ptr])
-                input_ptr += 1
-            else:
-                tape[ptr] = 0
-        elif cmd == "[":
-            if tape[ptr] == 0:
-                ip = brackets[ip]
-        elif cmd == "]":
-            if tape[ptr] != 0:
-                ip = brackets[ip]
-
-        ip += 1
-
-    return "".join(output)
+            case _:
+                continue
