@@ -103,4 +103,4 @@ def interpret_code(program, mem_size=30000):
         
         line += 1
 
-    return "".join(str(output))
+    return "".join(str(x) for x in output)
