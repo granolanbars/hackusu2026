@@ -70,7 +70,6 @@ import time
 from detection import *
 from coding import code_edit
 from tweet import send_tweet
-from interpreter import coding_interpreter, welcome_message
 from colors import c, RED, GREEN, YELLOW, CYAN, MAGENTA
 
 

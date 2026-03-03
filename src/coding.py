@@ -36,7 +36,7 @@
 #                 continue
 
 from detection import GestureEngine
-from interpreter import transpile, coding_interpreter
+from my_interpreterv2 import interpret_code
 from colors import c, RED, GREEN, YELLOW, CYAN, MAGENTA
 
 def code_edit(engine_a):
@@ -66,17 +66,17 @@ def code_edit(engine_a):
                 if confirmed:
                     print(c("Running your program...", GREEN))
                     print("\n\n")
-                    output = coding_interpreter(transpile(program))
-                    print(c(output, GREEN))
+                    print(interpret_code(program))
                     print("\n\n")
                     break
                 else:
                     continue
 
             case "LINE":
-                values = line[1:4]
-                print(c(" ".join(str(v) for v in values), MAGENTA))
-                program.append((line[1:4]))
+                left, right, literal = line[1:4]
+                program.append((left, right, literal))
+                print(c(left+right+str(literal), MAGENTA))
+                
 
             case _:
                 continue

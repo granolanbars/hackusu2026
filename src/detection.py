@@ -26,10 +26,15 @@ class GestureEngine:
             base_options=base,
             running_mode=vision.RunningMode.IMAGE,
             num_hands=2,
+        
         )
         self.timestamp = 0
-    
-        self.cap = cv2.VideoCapture(1)
+
+
+        cv2.namedWindow("Resized_Window", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Resized_Window", 960, 540)
+
+        self.cap = cv2.VideoCapture(0)
     
         
         self.smoothed_dist = 0.0
@@ -55,11 +60,15 @@ class GestureEngine:
         literal = round(self.smoothed_dist / 10) * 10
         return int(literal)
 
-    # ---------------------------------------------------------
-    # Raw detection (runs MediaPipe once per frame)
-    # ---------------------------------------------------------
+   
     def detect_gestures(self, frame):
-        h, w, dunce = frame.shape
+        h, w, _ = frame.shape
+
+        # --- Dynamic drawing parameters ---
+        th = max(2, int(h * 0.004))        # line thickness
+        fs = h * 0.0015                    # font scale
+        pad = int(h * 0.02)                # text padding
+
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
         result = self.detector.recognize(mp_image)
 
@@ -68,31 +77,32 @@ class GestureEngine:
         left_lm = None
         right_lm = None
         right_dist = None
-        #flipping hands to make easier readability
-        
 
-
+        # --- PASS 1: detect hands, draw boxes, store landmarks ---
         if result.gestures:
             for i, gesture_list in enumerate(result.gestures):
                 gesture = gesture_list[0].category_name
                 hand_label = result.handedness[i][0].category_name
                 landmarks = result.hand_landmarks[i]
 
-                # Compute bounding box
+                # Bounding box
                 xs = [lm.x * w for lm in landmarks]
                 ys = [lm.y * h for lm in landmarks]
-
                 x_min, x_max = int(min(xs)), int(max(xs))
                 y_min, y_max = int(min(ys)), int(max(ys))
 
                 # Draw rectangle
-                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max),
+                            (0, 255, 0), th)
 
-                # Label the box with gesture + handedness
+                # Label
                 label = f"{hand_label}: {gesture}"
-                cv2.putText(frame, label, (x_min, y_min - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                cv2.putText(frame, label,
+                            (x_min, max(0, y_min - pad)),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            fs, (0, 255, 0), th)
 
+                # Assign left/right
                 if hand_label == "Left":
                     left = gesture
                     left_lm = landmarks
@@ -100,23 +110,30 @@ class GestureEngine:
                     right = gesture
                     right_lm = landmarks
 
-                    thumb = landmarks[4]
-                    pinky = landmarks[8]
+        # --- PASS 2: draw thumb-to-thumb line if both hands exist ---
+        if left_lm is not None and right_lm is not None:
+            left_thumb = left_lm[4]   # thumb tip
+            right_thumb = right_lm[4]
 
-                    x1, y1 = thumb.x * w, thumb.y * h
-                    x2, y2 = pinky.x * w, pinky.y * h
-                    raw_dist = ((x2 - x1)**2 + (y2 - y1)**2) ** 0.5
+            x1, y1 = int(left_thumb.x * w), int(left_thumb.y * h)
+            x2, y2 = int(right_thumb.x * w), int(right_thumb.y * h)
 
-                    right_dist = self.process_distance(raw_dist, h)
-                    # Draw line between thumb and pinky
-                    cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
+            # Draw the line between thumbs
+            cv2.line(frame, (x1, y1), (x2, y2), (255, 0, 0), th)
 
-                    # Display the distance (raw or smoothed)
-                    cv2.putText(frame,
-                            f"dist: {int(raw_dist)} px  lit: {right_dist}",
-                            (int(x1), int(y1) - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 
-                            0.6,(255, 0, 0),2)
+            # Optional: compute distance between thumbs
+            raw_dist = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+            right_dist = self.process_distance(raw_dist, h)
+
+            # Distance label
+            label_x = x1 if y1 > y2 else x2
+            label_y = y1 if y1 > y2 else y2
+
+            cv2.putText(frame,
+                        f"value: {right_dist}",
+                        (label_x, max(0, label_y - pad)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        fs, (255, 0, 0), th)
 
         return {
             "left": left,
@@ -207,7 +224,7 @@ class GestureEngine:
         while True:
             ret, frame = self.cap.read()
             gestures = self.detect_gestures(frame)   # detect + draw on THIS frame
-            cv2.imshow("Camera", frame)       # show AFTER drawing
+            cv2.imshow("Resized_Window", frame)       # show AFTER drawing
             cv2.waitKey(1)
 
            
