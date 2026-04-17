@@ -1,6 +1,6 @@
 ﻿# Hand++
 
-Hand++ is a gesture controlled implementation of the esoteric programming language: brainf*ck.
+Hand++ is a gesture controlled implementation of the esoteric programming language: "brainf*ck".
 It uses googles hand recognition model, OpenCV, and MediaPipe to run gesture recognition.
 The commands are similar to its parent language, with the added functionality of setting memory values by the distance between thumbs in pixels instead of using hundreds of + signs 
 
